@@ -98,11 +98,12 @@ func (d *privateKeyDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	if privateKey.StatusCode() != http.StatusOK {
 		resp.Diagnostics.AddError(
 			"Unexpected HTTP status code reading private key",
-			fmt.Sprintf("Received %s for private key. Details: %s", privateKey.Status(), privateKey.Body),
+			fmt.Sprintf("Received %s for private key: uuid=%s. Details: %s", privateKey.Status(), plan.Uuid.ValueString(), privateKey.Body),
 		)
 		return
 	}
 
-	state := privateKeyModel{}.FromAPI(privateKey.JSON200)
+	var state privateKeyDataSourceModel
+	state = state.FromAPI(privateKey.JSON200, privateKeyModel{})
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

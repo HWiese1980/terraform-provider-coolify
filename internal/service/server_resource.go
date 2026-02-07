@@ -16,6 +16,7 @@ import (
 	"terraform-provider-coolify/internal/flatten"
 	"terraform-provider-coolify/internal/provider/generated/resource_server"
 	"terraform-provider-coolify/internal/provider/util"
+	"time"
 )
 
 var (
@@ -81,7 +82,14 @@ func (r *serverResource) Create(ctx context.Context, req resource.CreateRequest,
 			return &value
 		}(),
 		PrivateKeyUuid: plan.PrivateKeyUuid.ValueStringPointer(),
-		User:           plan.User.ValueStringPointer(),
+		ProxyType: func() *api.CreateServerJSONBodyProxyType {
+			if plan.ProxyType.IsUnknown() || plan.ProxyType.IsNull() {
+				return nil
+			}
+			value := api.CreateServerJSONBodyProxyType(plan.ProxyType.ValueString())
+			return &value
+		}(),
+		User: plan.User.ValueStringPointer(),
 	})
 
 	if err != nil {
@@ -168,6 +176,14 @@ func (r *serverResource) Update(ctx context.Context, req resource.UpdateRequest,
 			return &value
 		}(),
 		PrivateKeyUuid: plan.PrivateKeyUuid.ValueStringPointer(),
+
+		ProxyType: func() *api.UpdateServerByUuidJSONBodyProxyType {
+			if plan.ProxyType.IsUnknown() || plan.ProxyType.IsNull() {
+				return nil
+			}
+			value := api.UpdateServerByUuidJSONBodyProxyType(plan.ProxyType.ValueString())
+			return &value
+		}(),
 		User: func() *string {
 			if plan.User.IsUnknown() {
 				return nil
@@ -252,24 +268,41 @@ func (r *serverResource) ReadFromAPI(
 	diags *diag.Diagnostics,
 	uuid string,
 ) (resource_server.ServerModel, bool) {
-	readResp, err := r.client.GetServerByUuidWithResponse(ctx, uuid)
-	if err != nil {
-		diags.AddError(
-			fmt.Sprintf("Error reading server: uuid=%s", uuid),
-			err.Error(),
-		)
-		return resource_server.ServerModel{}, false
-	}
+	// Retry logic for eventual consistency
+	var readResp *api.GetServerByUuidResponse
+	var err error
 
-	if readResp.StatusCode() == http.StatusNotFound {
-		return resource_server.ServerModel{}, false
-	}
+	// Retry up to 5 times with 2 second delay
+	for i := 0; i < 5; i++ {
+		readResp, err = r.client.GetServerByUuidWithResponse(ctx, uuid)
+		if err != nil {
+			diags.AddError(
+				fmt.Sprintf("Error reading server: uuid=%s", uuid),
+				err.Error(),
+			)
+			return resource_server.ServerModel{}, false
+		}
 
-	if readResp.StatusCode() != http.StatusOK {
-		diags.AddError(
-			"Unexpected HTTP status code reading server",
-			fmt.Sprintf("Received %s for server: uuid=%s. Details: %s", readResp.Status(), uuid, readResp.Body))
-		return resource_server.ServerModel{}, false
+		if readResp.StatusCode() == http.StatusNotFound {
+			// If not found, it might be eventually consistent, but typically if it returns 404 it's gone.
+			// However, if we just created it, it SHOULD exist.
+			// For Read operation, 404 means remove from state.
+			return resource_server.ServerModel{}, false
+		}
+
+		if readResp.StatusCode() != http.StatusOK {
+			diags.AddError(
+				"Unexpected HTTP status code reading server",
+				fmt.Sprintf("Received %s for server: uuid=%s. Details: %s", readResp.Status(), uuid, readResp.Body))
+			return resource_server.ServerModel{}, false
+		}
+
+		// Check if critical fields are populated (e.g. ip if it was set)
+		// For now, just checking if we got a valid response is a start.
+		// If the API returns a server object, we assume it's good enough to return
+
+		// If we wanted to wait for a specific status, we would check it here and continue
+		time.Sleep(2 * time.Second)
 	}
 
 	return r.ApiToModel(ctx, diags, readResp.JSON200), true

@@ -30,19 +30,25 @@ type privateKeysDataSourceModel struct {
 	Filter      []filter.BlockModel         `tfsdk:"filter"`
 }
 
-func (m privateKeyModel) FromAPI(apiModel *api.PrivateKey) privateKeyModel {
+func (m privateKeyModel) FromAPI(apiModel *api.PrivateKey, state privateKeyModel) privateKeyModel {
 	return privateKeyModel{
 		Description:  flatten.String(apiModel.Description),
 		Fingerprint:  flatten.String(apiModel.Fingerprint),
 		Id:           flatten.Int64(apiModel.Id),
 		IsGitRelated: flatten.Bool(apiModel.IsGitRelated),
 		Name:         flatten.String(apiModel.Name),
-		PrivateKey:   flatten.String(apiModel.PrivateKey),
-		PublicKey:    flatten.String(apiModel.PublicKey),
-		TeamId:       flatten.Int64(apiModel.TeamId),
-		Uuid:         flatten.String(apiModel.Uuid),
-		CreatedAt:    flatten.String(apiModel.CreatedAt),
-		UpdatedAt:    flatten.String(apiModel.UpdatedAt),
+		PrivateKey: func() types.String {
+			val := flatten.String(apiModel.PrivateKey)
+			if val.IsNull() || val.ValueString() == "" {
+				return state.PrivateKey
+			}
+			return val
+		}(),
+		PublicKey: flatten.String(apiModel.PublicKey),
+		TeamId:    flatten.Int64(apiModel.TeamId),
+		Uuid:      flatten.String(apiModel.Uuid),
+		CreatedAt: flatten.String(apiModel.CreatedAt),
+		UpdatedAt: flatten.String(apiModel.UpdatedAt),
 	}
 }
 
