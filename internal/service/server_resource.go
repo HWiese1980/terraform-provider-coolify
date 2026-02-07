@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -16,7 +17,6 @@ import (
 	"terraform-provider-coolify/internal/flatten"
 	"terraform-provider-coolify/internal/provider/generated/resource_server"
 	"terraform-provider-coolify/internal/provider/util"
-	"time"
 )
 
 var (
@@ -276,6 +276,10 @@ func (r *serverResource) ReadFromAPI(
 	for i := 0; i < 5; i++ {
 		readResp, err = r.client.GetServerByUuidWithResponse(ctx, uuid)
 		if err != nil {
+			if i < 4 {
+				time.Sleep(2 * time.Second)
+				continue
+			}
 			diags.AddError(
 				fmt.Sprintf("Error reading server: uuid=%s", uuid),
 				err.Error(),
@@ -284,25 +288,28 @@ func (r *serverResource) ReadFromAPI(
 		}
 
 		if readResp.StatusCode() == http.StatusNotFound {
-			// If not found, it might be eventually consistent, but typically if it returns 404 it's gone.
-			// However, if we just created it, it SHOULD exist.
-			// For Read operation, 404 means remove from state.
+			if i < 4 {
+				// If not found, it might be eventually consistent.
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			// If still not found after retries, return false (removed from state)
 			return resource_server.ServerModel{}, false
 		}
 
 		if readResp.StatusCode() != http.StatusOK {
+			if i < 4 {
+				time.Sleep(2 * time.Second)
+				continue
+			}
 			diags.AddError(
 				"Unexpected HTTP status code reading server",
 				fmt.Sprintf("Received %s for server: uuid=%s. Details: %s", readResp.Status(), uuid, readResp.Body))
 			return resource_server.ServerModel{}, false
 		}
 
-		// Check if critical fields are populated (e.g. ip if it was set)
-		// For now, just checking if we got a valid response is a start.
-		// If the API returns a server object, we assume it's good enough to return
-
-		// If we wanted to wait for a specific status, we would check it here and continue
-		time.Sleep(2 * time.Second)
+		// If we got here, we have a valid response
+		break
 	}
 
 	return r.ApiToModel(ctx, diags, readResp.JSON200), true
