@@ -268,18 +268,12 @@ func (r *serverResource) ReadFromAPI(
 	diags *diag.Diagnostics,
 	uuid string,
 ) (resource_server.ServerModel, bool) {
-	// Retry logic for eventual consistency
+	// Retry up to 5 times with 2 second delay for eventual consistency
 	var readResp *api.GetServerByUuidResponse
 	var err error
-
-	// Retry up to 5 times with 2 second delay
 	for i := 0; i < 5; i++ {
 		readResp, err = r.client.GetServerByUuidWithResponse(ctx, uuid)
 		if err != nil {
-			if i < 4 {
-				time.Sleep(2 * time.Second)
-				continue
-			}
 			diags.AddError(
 				fmt.Sprintf("Error reading server: uuid=%s", uuid),
 				err.Error(),
@@ -287,32 +281,34 @@ func (r *serverResource) ReadFromAPI(
 			return resource_server.ServerModel{}, false
 		}
 
+		if readResp.StatusCode() == http.StatusOK {
+			return r.ApiToModel(ctx, diags, readResp.JSON200), true
+		}
+
 		if readResp.StatusCode() == http.StatusNotFound {
 			if i < 4 {
 				// If not found, it might be eventually consistent.
-				time.Sleep(2 * time.Second)
-				continue
+				select {
+				case <-ctx.Done():
+					return resource_server.ServerModel{}, false
+				case <-time.After(2 * time.Second):
+					continue
+				}
 			}
 			// If still not found after retries, return false (removed from state)
 			return resource_server.ServerModel{}, false
 		}
 
-		if readResp.StatusCode() != http.StatusOK {
-			if i < 4 {
-				time.Sleep(2 * time.Second)
-				continue
-			}
-			diags.AddError(
-				"Unexpected HTTP status code reading server",
-				fmt.Sprintf("Received %s for server: uuid=%s. Details: %s", readResp.Status(), uuid, readResp.Body))
-			return resource_server.ServerModel{}, false
-		}
-
-		// If we got here, we have a valid response
-		break
+		// For other non-200 statuses, we should probably fail unless we know it's a transient error.
+		// Detailed handling can be added here. For now, we report error.
+		diags.AddError(
+			"Unexpected HTTP status code reading server",
+			fmt.Sprintf("Received %s for server: uuid=%s. Details: %s", readResp.Status(), uuid, readResp.Body))
+		return resource_server.ServerModel{}, false
 	}
 
-	return r.ApiToModel(ctx, diags, readResp.JSON200), true
+	// Should be unreachable if logic is correct
+	return resource_server.ServerModel{}, false
 }
 
 func (r *serverResource) ApiToModel(
