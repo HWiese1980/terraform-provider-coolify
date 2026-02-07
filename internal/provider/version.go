@@ -12,7 +12,7 @@ import (
 func parseVersion(version string) (major, minor, patch, beta int) {
 	// Remove 'v' prefix if present
 	version = strings.TrimPrefix(version, "v")
-	
+
 	// Example version string: "4.0.0-beta.360"
 	parts := strings.Split(version, "-")
 	versionParts := strings.Split(parts[0], ".")
