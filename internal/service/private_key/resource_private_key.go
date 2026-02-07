@@ -288,5 +288,10 @@ func (r *privateKeyResource) readFromAPI(
 		return privateKeyResourceModel{}, false
 	}
 
-	return privateKeyResourceModel{}.FromAPI(readResp.JSON200, state), true
+	model := privateKeyResourceModel{}.FromAPI(readResp.JSON200)
+	if model.PrivateKey.IsNull() || model.PrivateKey.ValueString() == "" {
+		model.PrivateKey = state.PrivateKey
+	}
+
+	return model, true
 }

@@ -104,6 +104,6 @@ func (d *privateKeyDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	}
 
 	var state privateKeyDataSourceModel
-	state = state.FromAPI(privateKey.JSON200, privateKeyModel{})
+	state = state.FromAPI(privateKey.JSON200)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

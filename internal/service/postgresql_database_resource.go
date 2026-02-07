@@ -375,5 +375,9 @@ func (r *postgresqlDatabaseResource) ReadFromAPI(
 		return postgresqlDatabaseResourceModel{}, false
 	}
 
+	if result.PostgresPassword.IsNull() || result.PostgresPassword.ValueString() == "" {
+		result.PostgresPassword = state.PostgresPassword
+	}
+
 	return result, true
 }
