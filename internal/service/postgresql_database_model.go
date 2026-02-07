@@ -30,7 +30,13 @@ func (m postgresqlDatabaseModel) FromAPI(apiModel *api.Database, state postgresq
 		PostgresDb:             flatten.String(db.PostgresDb),
 		PostgresHostAuthMethod: flatten.String(db.PostgresHostAuthMethod),
 		PostgresInitdbArgs:     flatten.String(db.PostgresInitdbArgs),
-		PostgresPassword:       flatten.String(db.PostgresPassword),
-		PostgresUser:           flatten.String(db.PostgresUser),
+		PostgresPassword: func() types.String {
+			val := flatten.String(db.PostgresPassword)
+			if val.IsNull() || val.ValueString() == "" {
+				return state.PostgresPassword
+			}
+			return val
+		}(),
+		PostgresUser: flatten.String(db.PostgresUser),
 	}, nil
 }

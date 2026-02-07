@@ -109,7 +109,7 @@ func (d *privateKeysDataSource) apiToModel(
 	var privateKeyValues []privateKeyDataSourceModel
 
 	for _, pk := range *privateKeys {
-		model := privateKeyDataSourceModel{}.FromAPI(&pk)
+		model := privateKeyDataSourceModel{}.FromAPI(&pk, privateKeyModel{})
 
 		if !filter.OnStruct(ctx, model, filters) {
 			continue

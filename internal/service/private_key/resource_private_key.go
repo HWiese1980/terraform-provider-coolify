@@ -133,7 +133,7 @@ func (r *privateKeyResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	data, _ := r.readFromAPI(ctx, &resp.Diagnostics, *createResp.JSON201.Uuid)
+	data, _ := r.readFromAPI(ctx, &resp.Diagnostics, *createResp.JSON201.Uuid, plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -153,7 +153,7 @@ func (r *privateKeyResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	data, ok := r.readFromAPI(ctx, &resp.Diagnostics, state.Uuid.ValueString())
+	data, ok := r.readFromAPI(ctx, &resp.Diagnostics, state.Uuid.ValueString(), state)
 	if !ok {
 		resp.State.RemoveResource(ctx)
 		return
@@ -205,7 +205,7 @@ func (r *privateKeyResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	data, ok := r.readFromAPI(ctx, &resp.Diagnostics, uuid)
+	data, ok := r.readFromAPI(ctx, &resp.Diagnostics, uuid, plan)
 	if !ok {
 		resp.State.RemoveResource(ctx)
 		return
@@ -266,6 +266,7 @@ func (r *privateKeyResource) readFromAPI(
 	ctx context.Context,
 	diags *diag.Diagnostics,
 	uuid string,
+	state privateKeyResourceModel,
 ) (privateKeyResourceModel, bool) {
 	readResp, err := r.client.GetPrivateKeyByUuidWithResponse(ctx, uuid)
 	if err != nil {
@@ -287,5 +288,5 @@ func (r *privateKeyResource) readFromAPI(
 		return privateKeyResourceModel{}, false
 	}
 
-	return privateKeyResourceModel{}.FromAPI(readResp.JSON200), true
+	return privateKeyResourceModel{}.FromAPI(readResp.JSON200, state), true
 }
